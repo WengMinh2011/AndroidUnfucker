@@ -201,11 +201,11 @@ class MainActivity : Activity() {
                     "W=" + d + "(echo \"" + d + "LINE\" | sed 's/.*: //; s/x/ /' | cut -d' ' -f1); " +
                     "H=" + d + "(echo \"" + d + "LINE\" | sed 's/.*: //; s/x/ /' | cut -d' ' -f2); " +
                     "if [ -z \"" + d + "W\" ] || [ -z \"" + d + "H\" ]; then echo 'No physical size'; wm size; exit 1; fi; " +
-                    "NW=" + d + "(( (W * PCT / 100) / 2 * 2 )); " +
-                    "NH=" + d + "(( (H * PCT / 100) / 2 * 2 )); " +
+                    "NW=" + d + "(( (W * PCT / 100) / 8 * 8 )); " +
+                    "NH=" + d + "(( (H * PCT / 100) / 8 * 8 )); " +
                     "SHORT=" + d + "NW; if [ " + d + "NH -lt " + d + "NW ]; then SHORT=" + d + "NH; fi; " +
                     "if [ " + d + "SHORT -lt 480 ]; then echo 'Refused: short edge under 480'; exit 1; fi; " +
-                    "wm size " + d + "NW" + "x" + d + "NH; echo applied " + d + "NW x " + d + "NH; wm size"
+                    "wm size " + d + "{NW}x" + d + "{NH}; echo applied " + d + "{NW}x" + d + "{NH}; wm size"
             runShell(script)
         }
     }
