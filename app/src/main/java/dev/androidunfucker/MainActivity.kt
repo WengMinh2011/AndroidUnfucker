@@ -155,7 +155,21 @@ class MainActivity : Activity() {
         }
         Thread {
             try {
-                val process = Shizuku.newProcess(arrayOf("sh", "-c", command), null, null)
+                // Shizuku API 13.1.x keeps newProcess private. Invoke that legacy
+                // helper reflectively until command execution is migrated to UserService.
+                val method = Shizuku::class.java.getDeclaredMethod(
+                    "newProcess",
+                    Array<String>::class.java,
+                    Array<String>::class.java,
+                    String::class.java
+                )
+                method.isAccessible = true
+                val process = method.invoke(
+                    null,
+                    arrayOf("sh", "-c", command),
+                    null,
+                    null
+                ) as Process
                 val text = process.inputStream.bufferedReader().use { it.readText() }
                 val err = process.errorStream.bufferedReader().use { it.readText() }
                 val code = process.waitFor()
