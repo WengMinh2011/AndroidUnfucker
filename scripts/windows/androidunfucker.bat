@@ -132,3 +132,24 @@ adb shell getprop ro.build.fingerprint
 echo.
 pause
 goto menu
+
+:presets
+cls
+echo ==========================================
+echo             PRESET PROFILES
+echo ==========================================
+echo These profiles only change Android animation scales.
+echo They do NOT overclock the CPU/GPU or change touch sampling.
+echo.
+echo [1] Balanced - 0.5x animations
+echo [2] Snappy UI - animations off
+echo [3] Stock - normal 1x animations
+echo [4] Gaming feel - 0.5x animations, display unchanged
+echo [0] Back
+echo.
+set /p preset=Choose a preset: 
+if "%preset%"=="1" goto animhalf
+if "%preset%"=="2" goto animzero
+if "%preset%"=="3" goto animnormal
+if "%preset%"=="4" goto animhalf
+goto menu
