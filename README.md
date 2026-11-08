@@ -1,47 +1,79 @@
 # AndroidUnfucker
 
-A cautious, reversible Android tuning app, initially targeting older devices including Android 8.1 / ColorOS 5.x.
+A cautious, reversible Android tuning app, aimed at older and low-end devices (Android 8.1+ / ColorOS 5.x and similar).
 
-## App status
+## What it does
 
-The first native Android app implementation is in the repository. It provides:
-- Device and Android build information
-- Logical display resolution controls
-- Display density (DPI) controls
-- Balanced, Snappy UI, and Stock animation presets
-- Read-only CPU / thermal diagnostics where Android permits access
+- Device and build information
+- Logical display resolution (`wm size`) with confirmation + reset
+- Display density / DPI (`wm density`) with confirmation + reset
+- Animation scale presets: Balanced 0.5×, Snappy (off), Stock 1×
+- Shizuku-powered advanced tools (no root required):
+  - Stay awake while charging
+  - Battery + thermal snapshot
+  - Running process list
+  - Force-stop / clear-cache for a package
+  - One-tap reset of all display overrides
+- Optional **root extras** (only when `su` is available):
+  - Deeper sysfs CPU frequency + thermal zone readout
+  - `dmesg` tail
+- Large touch targets and a simple dark UI for low-end / older screens
 
-**The app requires Shizuku** to run privileged ADB-shell commands without root. Start Shizuku, grant AndroidUnfucker permission, then use the controls. The app does not silently apply changes.
+The app **never** applies changes silently. Destructive or hard-to-reverse actions ask for confirmation.
 
-## Compatibility
+## Requirements
 
-- Minimum Android: 8.1 (API 27)
-- Initial target: OPPO A5 / Snapdragon 450 / ColorOS 5.x
-- Build: Android Gradle Plugin 8.7.3, Kotlin 2.0.21, JDK 17
-- APK builds are produced by GitHub Actions.
+- **Shizuku** for privileged shell commands without root  
+  → https://shizuku.rikka.app/
+- Minimum Android 8.1 (API 27)
+- Initial test target: OPPO A5 / Snapdragon 450 / ColorOS 5.x
+
+Root is optional. Extra diagnostics appear when root is detected; overclocking, thermal-limit removal, and aggressive debloat are intentionally **not** included.
 
 ## Build an APK
 
-1. Open the repository's **Actions** tab.
-2. Select **Android APK**.
-3. Choose **Run workflow** (or wait for a push build).
-4. Open the completed workflow run.
-5. Download the **AndroidUnfucker-debug** artifact and extract the APK.
+1. Open the repository **Actions** tab
+2. Select **Android APK**
+3. Run the workflow (or push to `main`)
+4. Download the **AndroidUnfucker-debug** artifact
 
-## Shizuku setup
+Local build (JDK 17 + Android SDK):
 
-Install Shizuku from its official project page: https://shizuku.rikka.app/
-Follow the setup instructions for your Android version. Shizuku's wireless debugging setup differs by Android release; Android 8.1 may require starting the service through a computer using ADB, depending on the device.
+```bash
+gradle :app:assembleDebug
+```
 
-## Safety and limitations
+## Shizuku setup (especially Android 8.1)
 
-- Resolution and density are logical Android overrides, not changes to the physical panel.
-- Animation presets change UI animation timing; they do not increase CPU/GPU performance.
-- Touchscreen sampling is controlled by the controller, kernel, and vendor firmware. There is no universal safe ADB touch-boost command.
-- CPU/GPU frequency and thermal data are shown only if the device exposes readable interfaces.
-- No overclocking, thermal-limit removal, undocumented kernel writes, package debloating, or background-killer loops are included.
-- Use conservative display values and reset overrides if the interface becomes difficult to use: `wm size reset` and `wm density reset`.
+1. Install Shizuku from the official site.
+2. Start the Shizuku service (wireless debugging or ADB from a PC on older devices).
+3. Open AndroidUnfucker → **Grant / reconnect Shizuku** → allow permission.
+
+## Safety
+
+| Action | Reversible? |
+|--------|-------------|
+| Logical resolution | `wm size reset` |
+| Logical density | `wm density reset` |
+| Animation scales | set back to `1` |
+| Stay awake | set `stay_on_while_plugged_in` to `0` |
+| Force-stop / clear cache | app-specific; data is not wiped by clear-cache path used here |
+
+Still excluded on purpose:
+
+- CPU/GPU overclock or governor forcing
+- Thermal throttling removal
+- Blanket system package debloat
+- Undocumented touch / kernel sysfs writes
+- Background-killer loops
+
+If the UI becomes hard to use after a display change:
+
+```text
+wm size reset
+wm density reset
+```
 
 ## License
 
-See LICENSE.
+See LICENSE (add one if missing).
