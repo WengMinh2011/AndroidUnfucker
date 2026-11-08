@@ -1,37 +1,46 @@
-# AndroidUnfucker presets
-
-Presets are convenience profiles of **safe, reversible** Android settings. They do not overclock the SoC, remove thermal limits, or change touchscreen firmware.
+# AndroidUnfucker presets & performance levels
 
 ## One-tap profiles
 
-| Profile | Animations | Stay awake | Force GPU rendering | Notes |
-|---------|------------|------------|---------------------|-------|
-| **Gaming** | 0× (off) | On while charging | On | Less UI delay; does not raise game FPS by itself |
-| **Balanced** | 0.5× | Off | Off | Everyday use |
-| **Power saving** | 0.25× (smooth) | Off | Off | Slightly lighter UI work |
+| Profile | Animations | Stay awake | Force GPU rendering |
+|---------|------------|------------|---------------------|
+| Gaming | 0× | On while charging | On |
+| Balanced | 0.5× | Off | Off |
+| Power saving | 0.25× | Off | Off |
 
-Display resolution and DPI are **not** changed by profiles so a bad size cannot lock you out of the UI.
+Display resolution/DPI are never changed by profiles.
 
-## Animation-only scales
+## CPU performance levels
 
-| Label | Scale |
-|-------|------:|
-| Disable | 0 |
-| Smooth | 0.25 |
-| Balanced | 0.5 |
-| Stock | 1 |
+These change the **cpufreq governor** only (how aggressively the CPU uses existing clocks). They do **not** raise `cpuinfo_max_freq`.
 
-## Graphics flags
+| Level | Preferred governors (first available wins) |
+|-------|--------------------------------------------|
+| Low | `powersave` |
+| Balanced | `schedutil` → `interactive` → `ondemand` → `conservative` |
+| High | `performance` |
 
-- `force_gpu_rendering` — developer option; may help some 2D UI paths, not a Vulkan switch.
-- `disable_hw_overlays` — forces GPU composition; useful for debugging jank, can use more power.
+**Root is usually required** to write `/sys/devices/system/cpu/cpu*/cpufreq/scaling_governor`. Without root the app still tries and reports failures.
 
-Games choose **Vulkan / OpenGL / OpenGL ES** themselves. There is no universal safe ADB switch that forces Vulkan on every title on Android 8.1.
+Thermal limits remain active.
 
-## Thermal / throttling
+## GPU performance levels
 
-**Not implemented on purpose.** Removing thermal limits can permanently damage the device. Use the thermal snapshot (read-only) instead.
+Best-effort writes to common nodes:
 
-## App freeze
+- Adreno: `/sys/class/kgsl/kgsl-3d0/devfreq/governor`
+- Mali / generic: `/sys/class/devfreq/*mali*/governor`, `*gpu*/governor`
 
-`pm disable-user --user 0 <package>` freezes an app until `pm enable <package>`. Avoid freezing core system packages (`com.android.*` critical services, phone, settings).
+| Level | Preferred governors |
+|-------|---------------------|
+| Low | `powersave` |
+| Balanced | `msm-adreno-tz` / `simple_ondemand` / `ondemand` |
+| High | `performance` |
+
+If the node is missing or not writable, the action is skipped and reported in Output.
+
+## Not supported
+
+- Overclocking (raising max frequency tables)
+- Disabling thermal throttling
+- Forcing Vulkan vs OpenGL ES inside games (app decides)

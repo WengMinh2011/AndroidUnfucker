@@ -21,8 +21,8 @@ import java.util.concurrent.Executors
 
 /**
  * AndroidUnfucker — cautious, reversible tuning for older / low-end devices.
- * Privileged actions use Shizuku (no root). Optional read-only extras when root is present.
- * Thermal throttle removal and overclocking are intentionally not implemented.
+ * Privileged actions use Shizuku (no root). Optional CPU/GPU governor levels when root is present.
+ * No overclocking and no thermal-limit removal.
  */
 class MainActivity : Activity() {
 
@@ -103,9 +103,9 @@ class MainActivity : Activity() {
         )
         content.addView(actionButton("Refresh display size & DPI") { refreshDisplay() })
 
-        // One-tap profiles
+        // Profiles
         content.addView(section("Profiles"))
-        content.addView(hint("Combines animation + a few safe settings. Display size/DPI left unchanged."))
+        content.addView(hint("Combines animation + safe settings. Display size/DPI left unchanged."))
         content.addView(actionButton("Gaming") {
             confirm("Apply Gaming profile?\n• Animations off\n• Stay awake while charging\n• Force GPU rendering on") {
                 applyProfileGaming()
@@ -120,6 +120,44 @@ class MainActivity : Activity() {
             confirm("Apply Power saving profile?\n• Smooth animations 0.25×\n• Stay awake off\n• Force GPU rendering off") {
                 applyProfilePowerSaving()
             }
+        })
+
+        // CPU performance levels
+        content.addView(section("CPU performance levels"))
+        content.addView(
+            hint(
+                "Levels map to CPU governors (not overclock). " +
+                    "Writing governors usually needs root. Thermal limits stay active."
+            )
+        )
+        content.addView(actionButton("Read CPU status") { readCpuStatus() })
+        content.addView(actionButton("CPU • Low (powersave)") {
+            setCpuLevel("low")
+        })
+        content.addView(actionButton("CPU • Balanced (schedutil/interactive)") {
+            setCpuLevel("balanced")
+        })
+        content.addView(actionButton("CPU • High (performance)") {
+            setCpuLevel("high")
+        })
+
+        // GPU performance levels
+        content.addView(section("GPU performance levels"))
+        content.addView(
+            hint(
+                "Tries Adreno (kgsl) and common Mali devfreq governors. " +
+                    "Does not raise max clocks beyond kernel tables. Root usually required to write."
+            )
+        )
+        content.addView(actionButton("Read GPU status") { readGpuStatus() })
+        content.addView(actionButton("GPU • Low") {
+            setGpuLevel("low")
+        })
+        content.addView(actionButton("GPU • Balanced") {
+            setGpuLevel("balanced")
+        })
+        content.addView(actionButton("GPU • High") {
+            setGpuLevel("high")
         })
 
         // Display
@@ -157,12 +195,11 @@ class MainActivity : Activity() {
             )
         })
 
-        // Graphics / GPU related (safe developer toggles)
-        content.addView(section("Graphics (GPU / GLES)"))
+        // Graphics flags
+        content.addView(section("Graphics (GPU / GLES flags)"))
         content.addView(
             hint(
-                "These toggle Android developer graphics flags. " +
-                    "They do not switch Vulkan vs OpenGL ES inside games — apps choose their own API."
+                "Developer graphics flags only. Apps still choose Vulkan / OpenGL / GLES themselves."
             )
         )
         content.addView(actionButton("Force GPU rendering ON") {
@@ -199,12 +236,12 @@ class MainActivity : Activity() {
         })
         content.addView(actionButton("Try OEM performance / game menu") { openOemPerformanceMenu() })
 
-        // Thermal note (no disable)
+        // Thermal
         content.addView(section("Thermal / throttling"))
         content.addView(
             hint(
                 "Disabling thermal throttling is not supported. " +
-                    "It can overheat and damage the SoC. Use read-only diagnostics only."
+                    "It can overheat and damage the SoC. Read-only diagnostics only."
             )
         )
         content.addView(actionButton("Battery + thermal snapshot") {
@@ -217,7 +254,7 @@ class MainActivity : Activity() {
             )
         })
 
-        // Package / freeze
+        // Apps
         content.addView(section("Apps: stop / freeze"))
         content.addView(
             hint(
@@ -256,32 +293,21 @@ class MainActivity : Activity() {
             }
         })
 
-        // Root extras (read-only performance visibility)
-        content.addView(section("Root extras (optional)"))
-        content.addView(hint("Read-only CPU/GPU visibility. No governor force, no thermal unlock."))
+        // Root extras
+        content.addView(section("Root extras"))
+        content.addView(hint("Extra readouts. Governor writes are in the CPU/GPU sections above."))
         content.addView(actionButton("Detect root") { detectRootAndRefresh() })
-        content.addView(actionButton("CPU freqs + governors (root)") {
+        content.addView(actionButton("Deep sysfs / thermal (root)") {
             if (!hasRoot) {
                 outputView.text = "Root not detected."
                 return@actionButton
             }
             runRoot(
                 "echo '=== platform ==='; getprop ro.board.platform; " +
-                    "echo '=== freqs ==='; " +
+                    "echo '=== cpu freqs ==='; " +
                     "for c in /sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq; do echo \$c: \$(cat \$c 2>/dev/null); done; " +
-                    "echo '=== governors ==='; " +
-                    "for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo \$g: \$(cat \$g 2>/dev/null); done; " +
-                    "echo '=== available governors (cpu0) ==='; " +
-                    "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors 2>/dev/null"
-            )
-        })
-        content.addView(actionButton("Thermal zones (root)") {
-            if (!hasRoot) {
-                outputView.text = "Root not detected."
-                return@actionButton
-            }
-            runRoot(
-                "for t in /sys/class/thermal/thermal_zone*/temp; do echo \$t: \$(cat \$t 2>/dev/null); done | head -n 24"
+                    "echo '=== thermal zones ==='; " +
+                    "for t in /sys/class/thermal/thermal_zone*/temp; do echo \$t: \$(cat \$t 2>/dev/null); done | head -n 20"
             )
         })
         content.addView(actionButton("dmesg tail (root)") {
@@ -302,8 +328,8 @@ class MainActivity : Activity() {
         content.addView(outputView)
         content.addView(
             hint(
-                "Requires Shizuku running + permission. " +
-                    "Changes only happen when you tap a button. " +
+                "Requires Shizuku running + permission for most actions. " +
+                    "CPU/GPU level writes usually need root. " +
                     "If the UI becomes unusable: wm size reset && wm density reset"
             )
         )
@@ -313,6 +339,174 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
         )
         setContentView(root)
+    }
+
+    // ─── CPU / GPU levels ─────────────────────────────────────────────────
+
+    private fun readCpuStatus() {
+        val cmd =
+            "echo '=== CPU governors ==='; " +
+                "for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do " +
+                "  echo \$g: \$(cat \$g 2>/dev/null); " +
+                "done; " +
+                "echo '=== available (cpu0) ==='; " +
+                "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors 2>/dev/null; " +
+                "echo '=== current freqs ==='; " +
+                "for c in /sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq; do " +
+                "  echo \$c: \$(cat \$c 2>/dev/null); " +
+                "done; " +
+                "echo '=== min/max (cpu0) ==='; " +
+                "cat /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_min_freq 2>/dev/null; " +
+                "cat /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq 2>/dev/null"
+        if (hasRoot) runRoot(cmd) else runShell(cmd)
+    }
+
+    /**
+     * low -> powersave
+     * balanced -> schedutil, then interactive, then ondemand
+     * high -> performance
+     */
+    private fun setCpuLevel(level: String) {
+        val label = when (level) {
+            "low" -> "Low (powersave)"
+            "balanced" -> "Balanced (schedutil/interactive)"
+            else -> "High (performance)"
+        }
+        val script = when (level) {
+            "low" -> cpuGovernorScript(listOf("powersave"))
+            "balanced" -> cpuGovernorScript(listOf("schedutil", "interactive", "ondemand", "conservative"))
+            else -> cpuGovernorScript(listOf("performance"))
+        }
+        confirm(
+            "Set CPU level to $label?\n" +
+                "This only changes the governor (how often the CPU runs fast). " +
+                "It does not raise the max clock. Root is usually required.\n" +
+                "Thermal limits stay active."
+        ) {
+            if (hasRoot) runRoot(script) else {
+                // Try via Shizuku shell; often permission denied without root
+                runShell(script + "; echo '(If writes failed, root is required on this device.)'")
+            }
+        }
+    }
+
+    private fun cpuGovernorScript(preferred: List<String>): String {
+        val prefs = preferred.joinToString(" ")
+        return """
+            echo "Preferred governors: $prefs"
+            AVAIL=\$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors 2>/dev/null)
+            echo "Available: \$AVAIL"
+            CHOSEN=""
+            for g in $prefs; do
+              echo "\$AVAIL" | grep -qw "\$g" && CHOSEN="\$g" && break
+            done
+            if [ -z "\$CHOSEN" ]; then
+              echo "No preferred governor available on this kernel."
+              exit 1
+            fi
+            echo "Applying governor: \$CHOSEN"
+            for path in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+              echo \$CHOSEN > "\$path" 2>/dev/null && echo "OK \$path" || echo "FAIL \$path"
+            done
+            echo "=== result ==="
+            for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+              echo "\$g: \$(cat \$g 2>/dev/null)"
+            done
+        """.trimIndent()
+    }
+
+    private fun readGpuStatus() {
+        val cmd =
+            "echo '=== Adreno kgsl ==='; " +
+                "for p in /sys/class/kgsl/kgsl-3d0/devfreq/governor " +
+                "/sys/class/kgsl/kgsl-3d0/devfreq/cur_freq " +
+                "/sys/class/kgsl/kgsl-3d0/devfreq/available_governors " +
+                "/sys/class/kgsl/kgsl-3d0/gpuclk " +
+                "/sys/class/kgsl/kgsl-3d0/max_gpuclk; do " +
+                "  if [ -e \$p ]; then echo \$p: \$(cat \$p 2>/dev/null); fi; " +
+                "done; " +
+                "echo '=== Mali / generic devfreq ==='; " +
+                "for p in /sys/class/devfreq/*mali*/governor " +
+                "/sys/class/devfreq/*mali*/cur_freq " +
+                "/sys/class/devfreq/*mali*/available_governors " +
+                "/sys/class/devfreq/*gpu*/governor; do " +
+                "  for f in \$p; do if [ -e \$f ]; then echo \$f: \$(cat \$f 2>/dev/null); fi; done; " +
+                "done; " +
+                "echo '=== props ==='; " +
+                "getprop ro.hardware.egl; getprop ro.hardware.vulkan"
+        if (hasRoot) runRoot(cmd) else runShell(cmd)
+    }
+
+    /**
+     * GPU governor preference lists for Adreno and Mali-style nodes.
+     */
+    private fun setGpuLevel(level: String) {
+        val label = when (level) {
+            "low" -> "Low"
+            "balanced" -> "Balanced"
+            else -> "High"
+        }
+        val adrenoPrefs = when (level) {
+            "low" -> listOf("powersave")
+            "balanced" -> listOf("msm-adreno-tz", "simple_ondemand", "ondemand", "userspace")
+            else -> listOf("performance")
+        }
+        val maliPrefs = when (level) {
+            "low" -> listOf("powersave")
+            "balanced" -> listOf("simple_ondemand", "ondemand", "userspace")
+            else -> listOf("performance")
+        }
+        val script = gpuGovernorScript(adrenoPrefs, maliPrefs)
+        confirm(
+            "Set GPU level to $label?\n" +
+                "Writes device governors if the kernel exposes them. " +
+                "Not an overclock. Root is usually required."
+        ) {
+            if (hasRoot) runRoot(script) else {
+                runShell(script + "; echo '(If writes failed, root is required on this device.)'")
+            }
+        }
+    }
+
+    private fun gpuGovernorScript(adreno: List<String>, mali: List<String>): String {
+        val a = adreno.joinToString(" ")
+        val m = mali.joinToString(" ")
+        return """
+            apply_gov() {
+              NODE="\$1"; shift
+              AVAIL=\$(cat "\$(dirname \$NODE)/available_governors" 2>/dev/null)
+              [ -z "\$AVAIL" ] && AVAIL=\$(cat "\$NODE" 2>/dev/null)
+              CHOSEN=""
+              for g in \$@; do
+                echo "\$AVAIL" | grep -qw "\$g" && CHOSEN="\$g" && break
+              done
+              if [ -n "\$CHOSEN" ] && [ -w "\$NODE" ]; then
+                echo \$CHOSEN > "\$NODE" 2>/dev/null && echo "OK \$NODE -> \$CHOSEN" || echo "FAIL \$NODE"
+              elif [ -e "\$NODE" ]; then
+                echo "SKIP \$NODE (no match or not writable). avail=\$AVAIL"
+              fi
+            }
+
+            echo "=== Adreno ==="
+            for node in /sys/class/kgsl/kgsl-3d0/devfreq/governor /sys/class/kgsl/kgsl-3d0/pwrlevel; do
+              [ -e \$node ] && apply_gov \$node $a
+            done
+
+            echo "=== Mali / other GPU devfreq ==="
+            for node in /sys/class/devfreq/*mali*/governor /sys/class/devfreq/*gpu*/governor; do
+              for n in \$node; do
+                [ -e \$n ] && apply_gov \$n $m
+              done
+            done
+
+            echo "=== status after ==="
+            for p in /sys/class/kgsl/kgsl-3d0/devfreq/governor /sys/class/kgsl/kgsl-3d0/devfreq/cur_freq; do
+              [ -e \$p ] && echo \$p: \$(cat \$p 2>/dev/null)
+            done
+            for p in /sys/class/devfreq/*mali*/governor /sys/class/devfreq/*mali*/cur_freq; do
+              for f in \$p; do [ -e \$f ] && echo \$f: \$(cat \$f 2>/dev/null); done
+            done
+        """.trimIndent()
     }
 
     // ─── Profiles ─────────────────────────────────────────────────────────
@@ -445,9 +639,7 @@ class MainActivity : Activity() {
     private fun forceStopPackage() {
         val pkg = packageInput.text.toString().trim()
         if (!validPackage(pkg)) return
-        confirm("Force-stop $pkg?") {
-            runShell("am force-stop $pkg")
-        }
+        confirm("Force-stop $pkg?") { runShell("am force-stop $pkg") }
     }
 
     private fun clearPackageCache() {
@@ -469,9 +661,7 @@ class MainActivity : Activity() {
     private fun unfreezePackage() {
         val pkg = packageInput.text.toString().trim()
         if (!validPackage(pkg)) return
-        confirm("Unfreeze (enable) $pkg?") {
-            runShell("pm enable $pkg")
-        }
+        confirm("Unfreeze (enable) $pkg?") { runShell("pm enable $pkg") }
     }
 
     private fun validPackage(pkg: String): Boolean {
@@ -488,28 +678,21 @@ class MainActivity : Activity() {
             outputView.text = "Opened Developer options."
         } catch (_: Exception) {
             try {
-                val i = Intent(Settings.ACTION_SETTINGS)
-                startActivity(i)
-                outputView.text = "Developer options intent missing; opened main Settings. Enable Developer options manually."
+                startActivity(Intent(Settings.ACTION_SETTINGS))
+                outputView.text = "Developer options intent missing; opened main Settings."
             } catch (e: Exception) {
                 outputView.text = "Could not open Settings: ${e.message}"
             }
         }
     }
 
-    /**
-     * Best-effort OEM "performance / game space" activities.
-     * Many fail silently on non-matching devices — that is expected.
-     */
     private fun openOemPerformanceMenu() {
         val candidates = listOf(
-            // Common game space / booster style activities (OEM-specific)
             Component("com.coloros.gamespace", "com.coloros.gamespace.GameSpaceActivity"),
             Component("com.oplus.games", "com.oplus.games.GameSpaceActivity"),
             Component("com.samsung.android.game.gamehome", "com.samsung.android.game.gamehome.MainActivity"),
             Component("com.miui.securitycenter", "com.miui.gamebooster.GameBoosterMainActivity"),
             Component("com.huawei.systemmanager", "com.huawei.systemmanager.power.ui.HwPowerManagerActivity"),
-            // Generic developer / device info fallbacks
             Component("com.android.settings", "com.android.settings.Settings\$DevelopmentSettingsActivity"),
             Component("com.android.settings", "com.android.settings.DevelopmentSettings")
         )
@@ -524,13 +707,12 @@ class MainActivity : Activity() {
                 tried.append(c.pkg).append(" — ").append(e.javaClass.simpleName).append('\n')
             }
         }
-        // Last resort: application details for settings
         try {
             val uri = Uri.parse("package:com.android.settings")
             startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, uri))
-            outputView.text = "No OEM performance activity found.\nTried:\n$tried\nOpened Settings app details instead."
+            outputView.text = "No OEM performance activity found.\nTried:\n$tried"
         } catch (e: Exception) {
-            outputView.text = "No OEM performance menu found on this device.\nTried:\n$tried"
+            outputView.text = "No OEM performance menu found.\nTried:\n$tried"
         }
     }
 
