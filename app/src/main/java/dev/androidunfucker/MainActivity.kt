@@ -274,7 +274,7 @@ class MainActivity : Activity() {
     }
     private fun title(t: String, s: Int) = TextView(this).apply { text = t; textSize = s.toFloat(); setTextColor(0xFFE6EDF3.toInt()); typeface = Typeface.DEFAULT_BOLD }
     private fun subtitle(t: String) = TextView(this).apply { text = t; textSize = 13f; setTextColor(0xFF8B949E.toInt()) }
-    private fun section(t: String) = TextView(this).apply { text = t.uppercase(); textSize = 13f; typeface = Typeface.DEFAULT_BOLD; setTextColor(0xFF58A6FF.toInt()); setPadding(0, dp(18), 0, dp(6) }
+    private fun section(t: String) = TextView(this).apply { text = t.uppercase(); textSize = 13f; typeface = Typeface.DEFAULT_BOLD; setTextColor(0xFF58A6FF.toInt()); setPadding(0, dp(18), 0, dp(6)) }
     private fun body(t: String, s: Int, bold: Boolean) = TextView(this).apply { text = t; textSize = s.toFloat(); setTextColor(0xFFC9D1D9.toInt()); if (bold) typeface = Typeface.DEFAULT_BOLD }
     private fun hint(t: String) = TextView(this).apply { text = t; textSize = 12f; setTextColor(0xFF8B949E.toInt()) }
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply { text = label; isAllCaps = false; minHeight = dp(48); setOnClickListener { action() } }
