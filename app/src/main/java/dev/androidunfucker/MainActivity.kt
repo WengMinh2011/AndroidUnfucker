@@ -61,8 +61,8 @@ class MainActivity : Activity() {
         scroll.addView(content)
 
         content.addView(title("AndroidUnfucker", 22))
-        content.addView(subtitle("Reversible tuning • low-end friendly"))
-        statusView = body("Checking Shizuku…", 14, true)
+        content.addView(subtitle("Reversible tuning \u2022 low-end friendly"))
+        statusView = body("Checking Shizuku\u2026", 14, true)
         accessView = body("Access: unknown", 13, false)
         content.addView(statusView); content.addView(accessView)
         content.addView(actionButton("Grant / reconnect Shizuku") { requestShizuku() })
@@ -76,8 +76,16 @@ class MainActivity : Activity() {
         content.addView(actionButton("Balanced") { confirm("Apply Balanced?") { applyProfile("0.5", "0", "0") } })
         content.addView(actionButton("Power saving") { confirm("Apply Power saving?") { applyProfile("0.25", "0", "0") } })
 
+        content.addView(section("Game render scale"))
+        content.addView(hint("Lowers logical resolution so many games draw fewer pixels. Not an in-game slider. Short edge stays at least 480px."))
+        content.addView(actionButton("Read current size") { refreshDisplay() })
+        content.addView(rowButtons("Scale 75%" to { applyRenderScale(75) }, "Scale 50%" to { applyRenderScale(50) }))
+        content.addView(rowButtons("Scale 85%" to { applyRenderScale(85) }, "Native size" to {
+            confirm("Reset to physical resolution?") { runShell("wm size reset; wm size") }
+        }))
+
         content.addView(section("CPU performance levels"))
-        content.addView(hint("Governor only — not overclock. Root usually required."))
+        content.addView(hint("Governor only \u2014 not overclock. Root usually required."))
         content.addView(actionButton("Read CPU status") { readCpuStatus() })
         content.addView(actionButton("CPU Low") { setCpuLevel("powersave") })
         content.addView(actionButton("CPU Balanced") { setCpuLevel("schedutil interactive ondemand") })
@@ -112,6 +120,22 @@ class MainActivity : Activity() {
         content.addView(actionButton("Force GPU OFF") { runShell("settings put global force_gpu_rendering 0") })
         content.addView(actionButton("HW overlays OFF") { runShell("settings put global disable_hw_overlays 1") })
         content.addView(actionButton("HW overlays ON") { runShell("settings put global disable_hw_overlays 0") })
+
+        content.addView(section("Renderer and refresh"))
+        content.addView(hint("UI renderer hint only (OpenGL vs Vulkan). Games keep their own API. Refresh request is ignored if the panel cannot do it."))
+        content.addView(rowButtons("UI OpenGL" to { setHwuiRenderer("skiagl") }, "UI Vulkan" to { setHwuiRenderer("skiavk") }))
+        content.addView(actionButton("Clear renderer hint") { setHwuiRenderer(null) })
+        content.addView(rowButtons("Request 60 Hz" to { requestRefresh(60) }, "Request 90 Hz" to { requestRefresh(90) }))
+        content.addView(rowButtons("Request 120 Hz" to { requestRefresh(120) }, "Refresh default" to {
+            confirm("Clear min/peak refresh overrides?") {
+                runShell("settings delete system peak_refresh_rate; settings delete system min_refresh_rate; echo cleared")
+            }
+        }))
+        content.addView(rowButtons("Battery saver ON" to {
+            confirm("Turn on system battery saver?") { runShell("settings put global low_power 1; echo low_power=$(settings get global low_power)") }
+        }, "Battery saver OFF" to {
+            runShell("settings put global low_power 0; echo low_power=$(settings get global low_power)")
+        }))
 
         content.addView(section("Menus"))
         content.addView(actionButton("Developer options") { openDeveloperOptions() })
@@ -151,6 +175,50 @@ class MainActivity : Activity() {
         runShell("settings put global window_animation_scale $anim; settings put global transition_animation_scale $anim; settings put global animator_duration_scale $anim; settings put global stay_on_while_plugged_in $stay; settings put global force_gpu_rendering $gpu; echo done")
     }
 
+    private fun applyRenderScale(pct: Int) {
+        confirm(
+            "Render scale $pct% of physical size?\n" +
+                "Many games then draw fewer pixels. Reset with Native size if the UI breaks."
+        ) {
+            val d = "$"
+            val script =
+                "PCT=$pct; LINE=" + d + "(wm size | grep 'Physical size' | head -n 1); " +
+                    "W=" + d + "(echo \"" + d + "LINE\" | sed 's/.*: //; s/x/ /' | cut -d' ' -f1); " +
+                    "H=" + d + "(echo \"" + d + "LINE\" | sed 's/.*: //; s/x/ /' | cut -d' ' -f2); " +
+                    "if [ -z \"" + d + "W\" ] || [ -z \"" + d + "H\" ]; then echo 'No physical size'; wm size; exit 1; fi; " +
+                    "NW=" + d + "(( (W * PCT / 100) / 2 * 2 )); " +
+                    "NH=" + d + "(( (H * PCT / 100) / 2 * 2 )); " +
+                    "SHORT=" + d + "NW; if [ " + d + "NH -lt " + d + "NW ]; then SHORT=" + d + "NH; fi; " +
+                    "if [ " + d + "SHORT -lt 480 ]; then echo 'Refused: short edge under 480'; exit 1; fi; " +
+                    "wm size " + d + "NW" + "x" + d + "NH; echo applied " + d + "NW x " + d + "NH; wm size"
+            runShell(script)
+        }
+    }
+
+    private fun setHwuiRenderer(mode: String?) {
+        val label = mode ?: "default"
+        confirm(
+            "Set system UI renderer hint to $label?\n" +
+                "Sets debug.hwui.renderer. Does not force a game engine to Vulkan or OpenGL. Root is often required."
+        ) {
+            val cmd = if (mode == null) {
+                "setprop debug.hwui.renderer ''; getprop debug.hwui.renderer; echo cleared"
+            } else {
+                "setprop debug.hwui.renderer $mode; getprop debug.hwui.renderer"
+            }
+            if (hasRoot) runRoot(cmd) else runShell(cmd)
+        }
+    }
+
+    private fun requestRefresh(hz: Int) {
+        confirm("Request $hz Hz?\nThe panel ignores rates it does not support. This is not an overclock.") {
+            runShell(
+                "settings put system peak_refresh_rate $hz; settings put system min_refresh_rate $hz; " +
+                    "echo peak=$(settings get system peak_refresh_rate); echo min=$(settings get system min_refresh_rate)"
+            )
+        }
+    }
+
     private fun readCpuStatus() {
         val d = "$"
         val cmd = "for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo " + d + "g: " + d + "(cat " + d + "g 2>/dev/null); done; cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors 2>/dev/null; for c in /sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq; do echo " + d + "c: " + d + "(cat " + d + "c 2>/dev/null); done"
@@ -182,8 +250,8 @@ class MainActivity : Activity() {
     private fun updatePermissionStatus() {
         statusView.text = when {
             !Shizuku.pingBinder() -> "Shizuku is not running"
-            Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED -> "Shizuku connected • permission granted"
-            else -> "Shizuku connected • permission needed"
+            Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED -> "Shizuku connected \u2022 permission granted"
+            else -> "Shizuku connected \u2022 permission needed"
         }
         accessView.text = if (hasRoot) "Access: Shizuku + root" else "Access: Shizuku only (or none)"
     }
@@ -238,14 +306,14 @@ class MainActivity : Activity() {
     private fun runShell(command: String) {
         if (!Shizuku.pingBinder()) { statusView.text = "Shizuku is not running"; return }
         if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) { requestShizuku(); return }
-        outputView.text = "Running…"
+        outputView.text = "Running\u2026"
         executor.execute {
             val result = executeViaShizuku(command)
             runOnUiThread { outputView.text = result; updatePermissionStatus() }
         }
     }
     private fun runRoot(command: String) {
-        outputView.text = "Running as root…"
+        outputView.text = "Running as root\u2026"
         executor.execute {
             val result = try {
                 val p = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
