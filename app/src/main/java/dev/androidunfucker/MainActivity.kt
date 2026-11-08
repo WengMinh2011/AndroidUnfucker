@@ -1,6 +1,7 @@
 package dev.androidunfucker
 
 import android.app.Activity
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.graphics.Typeface
@@ -108,10 +109,6 @@ class MainActivity : Activity() {
     private fun requestShizuku() {
         if (!Shizuku.pingBinder()) {
             status.text = "Start Shizuku first, then return here"
-            return
-        }
-        if (Shizuku.isPreV11()) {
-            status.text = "This Shizuku version is too old"
             return
         }
         if (Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED) {
