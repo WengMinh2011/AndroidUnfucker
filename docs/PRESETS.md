@@ -1,29 +1,37 @@
 # AndroidUnfucker presets
 
-Presets are convenience profiles, not magic performance boosts. The initial ADB helper only applies reversible Android animation-scale changes. It does not overclock the Snapdragon 450, change touchscreen firmware, or disable thermal protection.
+Presets are convenience profiles of **safe, reversible** Android settings. They do not overclock the SoC, remove thermal limits, or change touchscreen firmware.
 
-## Initial presets
+## One-tap profiles
 
-| Preset | Animation scales | Display resolution / density | Intended use |
-|---|---:|---|---|
-| Balanced | 0.5x | Unchanged | Everyday use; keeps transitions visible |
-| Snappy UI | 0x | Unchanged | Minimal animation; may feel abrupt |
-| Stock | 1x | Unchanged | Restore standard animation timing |
-| Gaming feel | 0.5x | Unchanged | Less waiting through UI transitions before/after games |
+| Profile | Animations | Stay awake | Force GPU rendering | Notes |
+|---------|------------|------------|---------------------|-------|
+| **Gaming** | 0× (off) | On while charging | On | Less UI delay; does not raise game FPS by itself |
+| **Balanced** | 0.5× | Off | Off | Everyday use |
+| **Power saving** | 0.25× (smooth) | Off | Off | Slightly lighter UI work |
 
-The Gaming feel preset does not itself raise game FPS. Game rendering resolution can be configured separately using the display controls, but should be tested carefully and reset if the interface becomes distorted.
+Display resolution and DPI are **not** changed by profiles so a bad size cannot lock you out of the UI.
 
-## Planned profiles
+## Animation-only scales
 
-- **Display profiles:** save and restore user-tested resolution and density combinations, with a preview and confirmation.
-- **Gaming profiles:** per-game settings only where Android/OEM interfaces actually support them.
-- **Battery-conscious profile:** only documented, reversible settings; no background-killer loops.
-- **Advanced diagnostics:** report available CPU/GPU frequency and thermal sensors without forcing clocks.
+| Label | Scale |
+|-------|------:|
+| Disable | 0 |
+| Smooth | 0.25 |
+| Balanced | 0.5 |
+| Stock | 1 |
 
-## Device-specific values
+## Graphics flags
 
-Do not ship fixed DPI or resolution numbers as universal OPPO A5 presets. Panel configuration, ROM, and current overrides must be detected on the device first. The app should record the original values and offer a one-tap reset before applying any display profile.
+- `force_gpu_rendering` — developer option; may help some 2D UI paths, not a Vulkan switch.
+- `disable_hw_overlays` — forces GPU composition; useful for debugging jank, can use more power.
 
-## Overclocking policy
+Games choose **Vulkan / OpenGL / OpenGL ES** themselves. There is no universal safe ADB switch that forces Vulkan on every title on Android 8.1.
 
-CPU/GPU overclock controls remain hidden unless a compatible kernel exposes supported frequency tables and writable controls. Even then, thermal protections must remain active and the user must explicitly opt in. Monitoring is preferred over changing clocks.
+## Thermal / throttling
+
+**Not implemented on purpose.** Removing thermal limits can permanently damage the device. Use the thermal snapshot (read-only) instead.
+
+## App freeze
+
+`pm disable-user --user 0 <package>` freezes an app until `pm enable <package>`. Avoid freezing core system packages (`com.android.*` critical services, phone, settings).
