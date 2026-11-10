@@ -15,6 +15,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import rikka.shizuku.Shizuku
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -168,21 +169,46 @@ class MainActivity : Activity() {
                 if (validPkg(p)) confirm("Clear cache $p?") { runShell("pm clear --cache-only $p 2>/dev/null || true") }
             }))
         }
+        card(content, "Extra tools") {
+            gap(hint("Normal Android settings. Every tap toasts and prints in the bottom panel."))
+            gap(actionButton("Read what is applied") {
+                runShell("echo '--- display ---'; wm size; wm density; echo '--- anim ---'; settings get global window_animation_scale; settings get global transition_animation_scale; settings get global animator_duration_scale; echo '--- flags ---'; echo low_power=$(settings get global low_power); echo gpu=$(settings get global force_gpu_rendering); echo overlays=$(settings get global disable_hw_overlays); echo peak=$(settings get system peak_refresh_rate); echo min=$(settings get system min_refresh_rate); echo font=$(settings get system font_scale); echo touches=$(settings get system show_touches); echo pointer=$(settings get system pointer_location); echo timeout=$(settings get system screen_off_timeout); echo rotate=$(settings get system accelerometer_rotation); echo freezer=$(settings get global cached_apps_freezer)")
+            })
+            gap(rowButtons("Show touches ON" to { runShell("settings put system show_touches 1; echo show_touches=1") }, "Show touches OFF" to { runShell("settings put system show_touches 0; echo show_touches=0") }))
+            gap(rowButtons("Pointer loc ON" to { runShell("settings put system pointer_location 1; echo pointer=1") }, "Pointer loc OFF" to { runShell("settings put system pointer_location 0; echo pointer=0") }))
+            gap(rowButtons("Timeout 30s" to { runShell("settings put system screen_off_timeout 30000; echo timeout=30s") }, "Timeout 10m" to { runShell("settings put system screen_off_timeout 600000; echo timeout=10m") }))
+            gap(rowButtons("Font 0.85" to { confirm("Set font scale to 0.85?") { runShell("settings put system font_scale 0.85; echo font=0.85") } }, "Font 1.0" to { runShell("settings put system font_scale 1.0; echo font=1") }))
+            gap(rowButtons("Night mode ON" to { runShell("cmd uimode night yes; echo night") }, "Night mode OFF" to { runShell("cmd uimode night no; echo day") }))
+            gap(rowButtons("Auto rotate" to { runShell("settings put system accelerometer_rotation 1; echo rotate=auto") }, "Lock portrait" to { runShell("settings put system accelerometer_rotation 0; echo rotate=locked") }))
+            gap(rowButtons("Auto brightness" to { runShell("settings put system screen_brightness_mode 1; echo brightness=auto") }, "Manual brightness" to { runShell("settings put system screen_brightness_mode 0; echo brightness=manual") }))
+            gap(rowButtons("App freezer ON" to { runShell("settings put global cached_apps_freezer enabled; echo freezer=enabled") }, "App freezer OFF" to { runShell("settings put global cached_apps_freezer disabled; echo freezer=disabled") }))
+            gap(actionButton("Foreground app") { runShell("dumpsys activity activities | grep -m 1 mResumedActivity; dumpsys window | grep -m 1 mCurrentFocus") })
+            gap(actionButton("Frame stats for package") {
+                val pkg = packageInput.text.toString().trim()
+                if (validPkg(pkg)) runShell("dumpsys gfxinfo " + pkg + " | head -n 30")
+            })
+            gap(actionButton("Reset common tweaks") {
+                confirm("Reset size, DPI, animations, refresh, touches, font, and battery saver?") {
+                    runShell("wm size reset; wm density reset; settings put global window_animation_scale 1; settings put global transition_animation_scale 1; settings put global animator_duration_scale 1; settings put global force_gpu_rendering 0; settings put global disable_hw_overlays 0; settings put global low_power 0; settings put global stay_on_while_plugged_in 0; settings delete system peak_refresh_rate; settings delete system min_refresh_rate; settings put system show_touches 0; settings put system pointer_location 0; settings put system font_scale 1.0; echo reset-done")
+                }
+            })
+        }
         card(content, "Advanced") {
             gap(actionButton("Stay awake on charge") { runShell("settings put global stay_on_while_plugged_in 7") })
             gap(actionButton("Stay awake off") { runShell("settings put global stay_on_while_plugged_in 0") })
             gap(actionButton("Reset display overrides") { confirm("Reset size and DPI?") { runShell("wm size reset; wm density reset") } })
             gap(actionButton("Detect root") { detectRootAndRefresh() })
         }
-        card(content, "Output") {
-            outputView = body("No commands yet.", 12, false).apply {
-                setTextIsSelectable(true)
-                background = rounded(0xFF0D1117.toInt(), 10)
-                setPadding(dp(12), dp(10), dp(12), dp(10))
-            }
-            gap(outputView)
+        outputView = body("Tap a button. The result stays in this panel.", 12, false).apply {
+            setTextIsSelectable(true)
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+        }
+        val outputBox = ScrollView(this).apply {
+            background = rounded(0xFF111820.toInt(), 10)
+            addView(outputView)
         }
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(outputBox, LinearLayout.LayoutParams(-1, dp(150)).apply { topMargin = dp(8) })
         setContentView(root)
     }
 
@@ -272,9 +298,14 @@ class MainActivity : Activity() {
     }
 
     private fun requestShizuku() {
-        if (!Shizuku.pingBinder()) { statusView.text = "Start Shizuku first"; return }
-        if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) { updatePermissionStatus(); detectRootAndRefresh() }
-        else Shizuku.requestPermission(requestCode)
+        if (!Shizuku.pingBinder()) { note("Start Shizuku first, then tap Grant again."); return }
+        if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+            note("Shizuku already granted")
+            updatePermissionStatus(); detectRootAndRefresh()
+        } else {
+            note("Allow the Shizuku popup")
+            Shizuku.requestPermission(requestCode)
+        }
     }
 
     private fun detectRootAndRefresh() {
@@ -294,12 +325,12 @@ class MainActivity : Activity() {
     private fun refreshDisplay() = runShell("wm size; wm density")
     private fun applyResolution() {
         val w = widthInput.text.toString().toIntOrNull(); val h = heightInput.text.toString().toIntOrNull()
-        if (w == null || h == null || w !in 320..3000 || h !in 320..5000) { outputView.text = "Invalid size"; return }
+        if (w == null || h == null || w !in 320..3000 || h !in 320..5000) { note("Invalid size. Width 320-3000, height 320-5000."); return }
         confirm("Set ${w}x${h}?") { runShell("wm size ${w}x${h}") }
     }
     private fun applyDpi() {
         val dpi = dpiInput.text.toString().toIntOrNull()
-        if (dpi == null || dpi !in 100..800) { outputView.text = "Invalid DPI"; return }
+        if (dpi == null || dpi !in 100..800) { note("Invalid DPI. Use 100-800."); return }
         confirm("Set DPI $dpi?") { runShell("wm density $dpi") }
     }
     private fun setAnimations(scale: String) {
@@ -311,24 +342,35 @@ class MainActivity : Activity() {
         confirm("$cmd $p?") { runShell("$cmd $p") }
     }
     private fun validPkg(p: String): Boolean {
-        if (p.isEmpty() || !p.contains('.')) { outputView.text = "Enter package name"; return false }; return true
+        if (p.isEmpty() || !p.contains('.')) { note("Enter a package name in the box first"); return false }; return true
     }
     private fun openDeveloperOptions() {
         try { startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)) }
         catch (_: Exception) { try { startActivity(Intent(Settings.ACTION_SETTINGS)) } catch (e: Exception) { outputView.text = "${e.message}" } }
     }
 
+    private fun note(msg: String, toast: Boolean = true) {
+        outputView.text = msg
+        if (toast) {
+            val line = msg.lineSequence().firstOrNull().orEmpty().take(90)
+            Toast.makeText(this, line.ifBlank { "done" }, Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun runShell(command: String) {
-        if (!Shizuku.pingBinder()) { statusView.text = "Shizuku is not running"; return }
-        if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) { requestShizuku(); return }
-        outputView.text = "Running..."
+        if (!Shizuku.pingBinder()) { note("Shizuku is not running. Open Shizuku and start it, then tap Grant."); return }
+        if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+            note("Shizuku permission needed. Allow the popup.")
+            requestShizuku(); return
+        }
+        note("Running...", toast = false)
         executor.execute {
             val result = executeViaShizuku(command)
-            runOnUiThread { outputView.text = result; updatePermissionStatus() }
+            runOnUiThread { note(result.ifBlank { "Done, no output" }); updatePermissionStatus() }
         }
     }
     private fun runRoot(command: String) {
-        outputView.text = "Running as root..."
+        note("Running as root...", toast = false)
         executor.execute {
             val result = try {
                 val p = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
@@ -337,7 +379,7 @@ class MainActivity : Activity() {
                 val code = p.waitFor()
                 (out + err + "\nExit $code").trim()
             } catch (e: Exception) { "Root failed: ${e.message}" }
-            runOnUiThread { outputView.text = result }
+            runOnUiThread { note(result.ifBlank { "Done, no output" }) }
         }
     }
     private fun executeViaShizuku(command: String): String {
@@ -387,7 +429,17 @@ class MainActivity : Activity() {
     }
 
     private fun confirm(msg: String, yes: () -> Unit) {
-        AlertDialog.Builder(this).setTitle("Confirm").setMessage(msg).setPositiveButton("Yes") { _, _ -> yes() }.setNegativeButton("Cancel", null).show()
+        try {
+            note("Need confirm: " + msg.lineSequence().first(), toast = false)
+            AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Confirm")
+                .setMessage(msg)
+                .setPositiveButton("Yes") { _, _ -> yes() }
+                .setNegativeButton("Cancel") { _, _ -> note("Cancelled") }
+                .show()
+        } catch (e: Exception) {
+            note("Dialog failed: " + (e.message ?: e.javaClass.simpleName))
+        }
     }
     private fun title(t: String, s: Int) = TextView(this).apply {
         text = t; textSize = s.toFloat(); setTextColor(if (richUi) 0xFFF0F6FC.toInt() else 0xFFE6EDF3.toInt()); typeface = Typeface.DEFAULT_BOLD
@@ -404,7 +456,15 @@ class MainActivity : Activity() {
     private fun hint(t: String) = TextView(this).apply { text = t; textSize = 12f; setTextColor(0xFF8B949E.toInt()) }
     private fun mutedLabel(label: String) = listOf("Reset", "OFF", "Native", "Clear", "default").any { label.contains(it, true) }
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
-        text = label; isAllCaps = false; minHeight = dp(if (richUi) 50 else 48); setOnClickListener { action() }
+        text = label; isAllCaps = false; minHeight = dp(if (richUi) 50 else 48)
+        setOnClickListener {
+            try {
+                note("Tapped: " + label, toast = true)
+                action()
+            } catch (e: Exception) {
+                note("Button error: " + (e.message ?: e.javaClass.simpleName))
+            }
+        }
         if (richUi) {
             val color = when {
                 label.startsWith("Switch to") -> 0xFF8957E5.toInt()
