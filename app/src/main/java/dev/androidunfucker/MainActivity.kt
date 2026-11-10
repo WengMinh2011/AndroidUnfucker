@@ -85,9 +85,19 @@ class MainActivity : Activity() {
             gap(actionButton("Refresh display size and DPI") { refreshDisplay() })
         }
         card(content, "Profiles") {
-            gap(actionButton("Gaming") { confirm("Apply Gaming?") { applyProfile("0", "7", "1") } })
+            gap(hint("Gaming only turns animations off. Force GPU is not used — it slows many phones."))
+            gap(actionButton("Gaming") {
+                confirm("Apply Gaming?\nTurns animations off for snappier UI.\nDoes NOT force GPU rendering (that often makes low-end phones lag).") {
+                    applyProfile("0", "7", "0")
+                }
+            })
             gap(actionButton("Balanced") { confirm("Apply Balanced?") { applyProfile("0.5", "0", "0") } })
             gap(actionButton("Power saving") { confirm("Apply Power saving?") { applyProfile("0.25", "0", "0") } })
+            gap(actionButton("Undo lag (safe defaults)") {
+                confirm("Turn off Force GPU, re-enable HW overlays, reset animations to 0.5x, and restore native resolution?") {
+                    runShell("settings put global force_gpu_rendering 0; settings put global disable_hw_overlays 0; settings put global window_animation_scale 0.5; settings put global transition_animation_scale 0.5; settings put global animator_duration_scale 0.5; settings put global low_power 0; wm size reset; wm density reset; echo lag_undo_done")
+                }
+            })
         }
         card(content, "Game render scale") {
             gap(hint("Lowers logical resolution so many games draw fewer pixels. Not an in-game slider. Short edge stays at least 480px."))
@@ -129,9 +139,17 @@ class MainActivity : Activity() {
             gap(actionButton("Stock 1x") { setAnimations("1") })
         }
         card(content, "Graphics flags") {
-            gap(actionButton("Force GPU ON") { runShell("settings put global force_gpu_rendering 1") })
+            gap(actionButton("Force GPU ON") {
+                confirm("Force GPU rendering?\nOn many low-end phones this makes the UI SLOWER, not faster. Prefer leaving it OFF.") {
+                    runShell("settings put global force_gpu_rendering 1; echo force_gpu=1")
+                }
+            })
             gap(actionButton("Force GPU OFF") { runShell("settings put global force_gpu_rendering 0") })
-            gap(actionButton("HW overlays OFF") { runShell("settings put global disable_hw_overlays 1") })
+            gap(actionButton("HW overlays OFF") {
+                confirm("Disable HW overlays?\nCan help debugging but often hurts performance. Prefer ON.") {
+                    runShell("settings put global disable_hw_overlays 1; echo overlays_disabled=1")
+                }
+            })
             gap(actionButton("HW overlays ON") { runShell("settings put global disable_hw_overlays 0") })
         }
         card(content, "Renderer and refresh") {
