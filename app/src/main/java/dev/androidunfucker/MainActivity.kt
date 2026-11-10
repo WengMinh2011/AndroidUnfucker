@@ -100,12 +100,16 @@ class MainActivity : Activity() {
             })
         }
         card(content, "Game render scale") {
-            gap(hint("Lowers logical resolution for games. Keeps panel aspect ratio so the notch stays centered. Short edge stays at least 480px."))
+            gap(hint("Lowers logical resolution for games. Always keeps the panel aspect ratio so the notch stays centered. Short edge stays at least 480px."))
             gap(actionButton("Read current size") { refreshDisplay() })
-            gap(rowButtons("Scale 75%" to { applyRenderScale(75) }, "Scale 50%" to { applyRenderScale(50) }))
-            gap(rowButtons("Scale 85%" to { applyRenderScale(85) }, "Native size" to {
+            gap(hint("Size + DPI (UI stays same visual size)"))
+            gap(rowButtons("75% + DPI" to { applyRenderScale(75, true) }, "50% + DPI" to { applyRenderScale(50, true) }))
+            gap(rowButtons("85% + DPI" to { applyRenderScale(85, true) }, "Native size" to {
                 confirm("Reset to physical resolution and density?") { runShell("wm size reset; wm density reset; wm size; wm density") }
             }))
+            gap(hint("Size only — keeps current DPI (UI looks bigger)"))
+            gap(rowButtons("75% size only" to { applyRenderScale(75, false) }, "50% size only" to { applyRenderScale(50, false) }))
+            gap(actionButton("85% size only") { applyRenderScale(85, false) })
         }
         card(content, "CPU performance levels") {
             gap(hint("Governor only. Not an overclock. Root is usually required."))
@@ -234,15 +238,28 @@ class MainActivity : Activity() {
         runShell("settings put global window_animation_scale $anim; settings put global transition_animation_scale $anim; settings put global animator_duration_scale $anim; settings put global stay_on_while_plugged_in $stay; settings put global force_gpu_rendering $gpu; echo done")
     }
 
-    private fun applyRenderScale(pct: Int) {
+    private fun applyRenderScale(pct: Int, scaleDpi: Boolean) {
+        val mode = if (scaleDpi) "size + DPI" else "size only (DPI unchanged)"
         confirm(
-            "Render scale $pct% of physical size?\n" +
-                "Keeps the same aspect ratio so the notch stays centered.\n" +
-                "Also scales DPI. Reset with Native size if the UI breaks."
+            "Render scale $pct% ($mode)?\n" +
+                "Keeps the physical aspect ratio so the notch stays centered.\n" +
+                "Reset with Native size if the UI breaks."
         ) {
             val d = "$"
-            // Width scaled + height locked to physical aspect ratio (avoids off-center notch).
-            // Density scaled the same percent so system UI maps correctly on OPPO/ColorOS.
+            // Width scaled; height locked to physical aspect ratio (notch stays centered).
+            // Optional proportional DPI for same visual UI size.
+            val densityPart = if (scaleDpi) {
+                "DLINE=" + d + "(wm density | grep 'Physical density' | head -n 1); " +
+                    "D=" + d + "(echo \"" + d + "DLINE\" | sed 's/.*: //'); " +
+                    "if [ -z \"" + d + "D\" ]; then D=320; fi; " +
+                    "ND=" + d + "(( D * PCT / 100 )); " +
+                    "if [ " + d + "ND -lt 120 ]; then ND=120; fi; " +
+                    "if [ " + d + "ND -gt 640 ]; then ND=640; fi; " +
+                    "wm density " + d + "ND; " +
+                    "echo density=" + d + "ND; "
+            } else {
+                "echo density_unchanged; "
+            }
             val script =
                 "PCT=$pct; " +
                     "LINE=" + d + "(wm size | grep 'Physical size' | head -n 1); " +
@@ -254,15 +271,9 @@ class MainActivity : Activity() {
                     "NH=" + d + "(( NW * H / W )); " +
                     "NH=" + d + "(( NH / 8 * 8 )); " +
                     "if [ " + d + "NH -lt 480 ]; then echo 'Refused: height under 480'; exit 1; fi; " +
-                    "DLINE=" + d + "(wm density | grep 'Physical density' | head -n 1); " +
-                    "D=" + d + "(echo \"" + d + "DLINE\" | sed 's/.*: //'); " +
-                    "if [ -z \"" + d + "D\" ]; then D=320; fi; " +
-                    "ND=" + d + "(( D * PCT / 100 )); " +
-                    "if [ " + d + "ND -lt 120 ]; then ND=120; fi; " +
-                    "if [ " + d + "ND -gt 640 ]; then ND=640; fi; " +
                     "wm size " + d + "{NW}x" + d + "{NH}; " +
-                    "wm density " + d + "ND; " +
-                    "echo applied " + d + "{NW}x" + d + "{NH} density=" + d + "ND; " +
+                    densityPart +
+                    "echo applied " + d + "{NW}x" + d + "{NH}; " +
                     "wm size; wm density"
             runShell(script)
         }
