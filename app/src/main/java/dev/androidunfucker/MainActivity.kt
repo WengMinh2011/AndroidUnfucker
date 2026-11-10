@@ -100,11 +100,11 @@ class MainActivity : Activity() {
             })
         }
         card(content, "Game render scale") {
-            gap(hint("Lowers logical resolution so many games draw fewer pixels. Not an in-game slider. Short edge stays at least 480px."))
+            gap(hint("Lowers logical resolution for games. Keeps panel aspect ratio so the notch stays centered. Short edge stays at least 480px."))
             gap(actionButton("Read current size") { refreshDisplay() })
             gap(rowButtons("Scale 75%" to { applyRenderScale(75) }, "Scale 50%" to { applyRenderScale(50) }))
             gap(rowButtons("Scale 85%" to { applyRenderScale(85) }, "Native size" to {
-                confirm("Reset to physical resolution?") { runShell("wm size reset; wm size") }
+                confirm("Reset to physical resolution and density?") { runShell("wm size reset; wm density reset; wm size; wm density") }
             }))
         }
         card(content, "CPU performance levels") {
@@ -237,19 +237,33 @@ class MainActivity : Activity() {
     private fun applyRenderScale(pct: Int) {
         confirm(
             "Render scale $pct% of physical size?\n" +
-                "Many games then draw fewer pixels. Reset with Native size if the UI breaks."
+                "Keeps the same aspect ratio so the notch stays centered.\n" +
+                "Also scales DPI. Reset with Native size if the UI breaks."
         ) {
             val d = "$"
+            // Width scaled + height locked to physical aspect ratio (avoids off-center notch).
+            // Density scaled the same percent so system UI maps correctly on OPPO/ColorOS.
             val script =
-                "PCT=$pct; LINE=" + d + "(wm size | grep 'Physical size' | head -n 1); " +
+                "PCT=$pct; " +
+                    "LINE=" + d + "(wm size | grep 'Physical size' | head -n 1); " +
                     "W=" + d + "(echo \"" + d + "LINE\" | sed 's/.*: //; s/x/ /' | cut -d' ' -f1); " +
                     "H=" + d + "(echo \"" + d + "LINE\" | sed 's/.*: //; s/x/ /' | cut -d' ' -f2); " +
                     "if [ -z \"" + d + "W\" ] || [ -z \"" + d + "H\" ]; then echo 'No physical size'; wm size; exit 1; fi; " +
                     "NW=" + d + "(( (W * PCT / 100) / 8 * 8 )); " +
-                    "NH=" + d + "(( (H * PCT / 100) / 8 * 8 )); " +
-                    "SHORT=" + d + "NW; if [ " + d + "NH -lt " + d + "NW ]; then SHORT=" + d + "NH; fi; " +
-                    "if [ " + d + "SHORT -lt 480 ]; then echo 'Refused: short edge under 480'; exit 1; fi; " +
-                    "wm size " + d + "{NW}x" + d + "{NH}; echo applied " + d + "{NW}x" + d + "{NH}; wm size"
+                    "if [ " + d + "NW -lt 480 ]; then echo 'Refused: width under 480'; exit 1; fi; " +
+                    "NH=" + d + "(( NW * H / W )); " +
+                    "NH=" + d + "(( NH / 8 * 8 )); " +
+                    "if [ " + d + "NH -lt 480 ]; then echo 'Refused: height under 480'; exit 1; fi; " +
+                    "DLINE=" + d + "(wm density | grep 'Physical density' | head -n 1); " +
+                    "D=" + d + "(echo \"" + d + "DLINE\" | sed 's/.*: //'); " +
+                    "if [ -z \"" + d + "D\" ]; then D=320; fi; " +
+                    "ND=" + d + "(( D * PCT / 100 )); " +
+                    "if [ " + d + "ND -lt 120 ]; then ND=120; fi; " +
+                    "if [ " + d + "ND -gt 640 ]; then ND=640; fi; " +
+                    "wm size " + d + "{NW}x" + d + "{NH}; " +
+                    "wm density " + d + "ND; " +
+                    "echo applied " + d + "{NW}x" + d + "{NH} density=" + d + "ND; " +
+                    "wm size; wm density"
             runShell(script)
         }
     }
